@@ -1,0 +1,40 @@
+# Lines starting with a `#` are comments.
+    
+    # Leading whitespace is ignored.
+
+    # ^ Empty lines are ignored too!
+
+# Initialize a season with a size (N), a list of guys and a list of girls.
+
+    new-game     8      A B C D E F G H      a b c d e f g h
+
+# Apply some prior hypotheses in "offline mode" (no recalculations), then batch normalize them.
+
+    apply-truth-booth --offline                      A a
+    apply-truth-booth --offline                      F h
+    apply-truth-booth --offline     --incorrect      C e 
+    apply-truth-booth --offline     --incorrect      C g
+    apply-truth-booth --offline     --incorrect      D b
+
+    recalculate
+    print
+
+# Calculate the ideal matching.
+
+    best-ceremony
+
+# Apply a matching, and declare how many pairs were correct.
+
+    apply-ceremony 3 A a B b C c D d E e F h G f H g
+    next-turn 
+    print
+
+# What's the best pair to send to the truth booth?
+
+    # The best of all possible pairs:
+    best-truth-booth 
+
+    # The best of all pairs in the most recent matching:
+    best-truth-booth --constrain
+
+

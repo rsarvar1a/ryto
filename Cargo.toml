@@ -1,0 +1,24 @@
+[package]
+name = "ayto-rs"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+incremental = true
+
+[dependencies]
+anyhow = "1.0.94"
+clap = { version = "4.5.23", features = ["derive"] }
+factorial = "0.4.0"
+indicatif = { version = "0.17.9", features = ["rayon"] }
+itertools = "0.13.0"
+lazy_static = "1.5.0"
+log = "0.4.22"
+ndarray = { version = "0.16.1", features = ["rayon"] }
+pretty_env_logger = "0.5.0"
+rand = "0.8.5"
+rayon = "1.10.0"
+tabled = "0.17.0"
