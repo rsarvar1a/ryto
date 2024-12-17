@@ -8,6 +8,13 @@
 
     new-game     8      A B C D E F G H      a b c d e f g h
 
+# Show the season.
+
+    print
+    
+    # Or as a probability matrix:
+    print --probabilities
+
 # Apply some prior hypotheses in "offline mode" (no recalculations), then batch normalize them.
 
     apply-truth-booth --offline                      A a
@@ -17,17 +24,13 @@
     apply-truth-booth --offline     --incorrect      D b
 
     recalculate
-    print
-
-# Calculate the ideal matching.
-
-    best-ceremony
+    print -p
 
 # Apply a matching, and declare how many pairs were correct.
 
     apply-ceremony 3 A a B b C c D d E e F h G f H g
     next-turn 
-    print
+    print -p
 
 # What's the best pair to send to the truth booth?
 
@@ -37,4 +40,10 @@
     # The best of all pairs in the most recent matching:
     best-truth-booth --constrain
 
+    # Apply it!
+    apply-truth-booth                               C c
+    print -p
 
+# Now, compute the best ceremony.
+
+    best-ceremony

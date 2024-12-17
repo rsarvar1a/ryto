@@ -1,6 +1,6 @@
 use std::usize;
 
-use indicatif::ProgressStyle;
+use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::parallel::prelude::IntoParallelRefIterator;
 
 use crate::prelude::*;
@@ -29,37 +29,75 @@ impl<'a> Season<'a> {
             return (vec![], usize::MAX);
         }
 
-        let results: Vec<(Vec<Couple>, usize)> = self
-            .worlds
-            .par_iter()
-            .progress()
-            .with_style(ProgressStyle::with_template(INDICATIF_TEMPLATE).unwrap())
-            .map(|k| {
-                let candidate = &self.worldview[*k];
-                let strip = candidate
-                    .clone()
-                    .into_iter()
-                    .enumerate()
-                    .collect::<Vec<Couple>>();
+        let results: Vec<(Vec<Couple>, usize)> = if cfg!(feature="bench") {
+            let bar = ProgressBar::new(self.worlds.len() as u64).with_style(ProgressStyle::with_template(INDICATIF_TEMPLATE).unwrap());
+            
+            let r = self
+                .worlds
+                .iter()
+                .map(|&k| {
+                    let candidate = unsafe { self.worldview.get_unchecked(k) };
+                    let strip = candidate
+                        .clone()
+                        .into_iter()
+                        .enumerate()
+                        .collect::<Vec<Couple>>();
+    
+                    // We should iterate over beam values starting at the number of already-found couples,
+                    // because no world left in the worldview couild possibly match on fewer.
+                    let best_possible_worst_case = (self.found..self.n)
+                        .map(|beams| {
+                            let mut season = self.clone();
+                            season
+                                .apply_ceremony_impl(candidate, beams)
+                                .and_then(|season| season.recalculate())
+                                .map(|season| season.find_best_truth_impl(Some(&strip)).1)
+                                .unwrap_or(usize::MAX)
+                        })
+                        .filter(|s| ![0, usize::MAX].contains(s))
+                        .min()
+                        .unwrap_or(usize::MAX);
+    
+                    bar.inc(1);
+                    (strip, best_possible_worst_case)
+                })
+                .collect();
 
-                // We should iterate over beam values starting at the number of already-found couples,
-                // because no world left in the worldview couild possibly match on fewer.
-                let best_possible_worst_case = (self.found..self.n)
-                    .map(|beams| {
-                        let mut season = self.clone();
-                        season
-                            .apply_ceremony_impl(candidate, beams)
-                            .and_then(|season| season.recalculate())
-                            .map(|season| season.find_best_truth_impl(Some(&strip)).1)
-                            .unwrap_or(usize::MAX)
-                    })
-                    .filter(|s| ![0, usize::MAX].contains(s))
-                    .min()
-                    .unwrap_or(usize::MAX);
-
-                (strip, best_possible_worst_case)
-            })
-            .collect();
+                bar.finish_and_clear();
+                r
+        } else {
+            self
+                .worlds
+                .par_iter()
+                .progress()
+                .with_style(ProgressStyle::with_template(INDICATIF_TEMPLATE).unwrap())
+                .map(|&k| {
+                    let candidate = unsafe { self.worldview.get_unchecked(k) };
+                    let strip = candidate
+                        .clone()
+                        .into_iter()
+                        .enumerate()
+                        .collect::<Vec<Couple>>();
+    
+                    // We should iterate over beam values starting at the number of already-found couples,
+                    // because no world left in the worldview couild possibly match on fewer.
+                    let best_possible_worst_case = (self.found..self.n)
+                        .map(|beams| {
+                            let mut season = self.clone();
+                            season
+                                .apply_ceremony_impl(candidate, beams)
+                                .and_then(|season| season.recalculate())
+                                .map(|season| season.find_best_truth_impl(Some(&strip)).1)
+                                .unwrap_or(usize::MAX)
+                        })
+                        .filter(|s| ![0, usize::MAX].contains(s))
+                        .min()
+                        .unwrap_or(usize::MAX);
+    
+                    (strip, best_possible_worst_case)
+                })
+                .collect()
+        };
 
         let lowest_worst_case = results
             .iter()

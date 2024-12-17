@@ -44,10 +44,10 @@ impl<'a> Season<'a> {
         self.worlds
             // Keep only those indices for which the corresponding world matches the ceremonial world in exactly `beams` places.
             .retain(|&i| {
-                self.worldview[i]
+                unsafe { self.worldview.get_unchecked(i) }
                     .iter()
                     .zip(couples)
-                    .filter(|(&lhs, rhs)| lhs == **rhs)
+                    .filter(|(&lhs, &rhs)| lhs == rhs)
                     .count()
                     == beams
             });
@@ -79,7 +79,10 @@ impl<'a> Season<'a> {
         let (m, f) = couple;
 
         self.worlds
-            .retain(|&i| (self.worldview[i][m] == f) == correct);
+            .retain(|&i| { 
+                let check = unsafe { *self.worldview.get_unchecked(i).get_unchecked(m) };
+                (check == f) == correct
+            });
 
         Ok(self)
     }
@@ -95,27 +98,18 @@ impl<'a> Season<'a> {
 
     /// Recomputes the bipartite probability table for this season.
     pub fn recalculate(&mut self) -> Result<&mut Self> {
-        let num_worlds = self.worlds.len();
-        trace!("recalculating on {num_worlds} world(s)");
+        let nw = self.worlds.len() as f32;
+        
+        let mut view = self.distribution.view_mut();
+        (0..self.n).for_each(|m| {
+            view.slice_mut(s![m, ..]).fill(0.0);
+            self.worlds.iter().for_each(|&k| {
+                let f = unsafe { *self.worldview.get_unchecked(k).get_unchecked(m) };
+                view[(m, f)] += 1.0;
+            });
+        });
+        view /= nw;
 
-        let data: Vec<f32> = (0..self.n)
-            .flat_map(|m| {
-                // For the current `m`, count how many worlds match `m` with each `f`.
-                let mut counts = vec![0; self.n];
-                self.worlds.iter().for_each(|k| {
-                    let idx = self.worldview[*k][m];
-                    counts[idx] += 1;
-                });
-
-                // Order the frequencies of `f` into an array indexed by `f`, filling in the
-                // gaps (`f`s for which there are no worlds) with 0s.
-                (0..self.n)
-                    .into_iter()
-                    .map(move |f| (counts[f] as f32 / num_worlds as f32))
-            })
-            .collect();
-
-        self.distribution = Array2::from_shape_vec((self.n, self.n), data)?;
         self.found = self.distribution.iter().filter(|&e| *e == 1.0).count();
 
         Ok(self)

@@ -13,7 +13,7 @@ struct Root {
 enum Commands {
     NewGame(NewGameArgs),
     NextTurn,
-    Print,
+    Print(PrintArgs),
     Recalculate,
     ApplyCeremony(ApplyCeremonyArgs),
     ApplyTruthBooth(ApplyTruthBoothArgs),
@@ -26,7 +26,7 @@ impl std::fmt::Display for Commands {
         let repr = match self {
             Commands::NewGame(_) => "new-game",
             Commands::NextTurn => "next-turn",
-            Commands::Print => "print",
+            Commands::Print(_) => "print",
             Commands::Recalculate => "recalculate",
             Commands::ApplyCeremony(_) => "apply-ceremony",
             Commands::ApplyTruthBooth(_) => "apply-truth-booth",
@@ -68,6 +68,12 @@ struct BestTruthBoothArgs {
 struct NewGameArgs {
     n: usize,
     names: Vec<String>,
+}
+
+#[derive(Clone, Debug, Args)]
+struct PrintArgs {
+    #[arg(short, long)]
+    probabilities: bool,
 }
 
 fn main() -> () {
@@ -128,7 +134,6 @@ fn _main() -> Result<()> {
 
                     match r {
                         Ok(s) => {
-                            s.pretty_print(true);
                             season = Some(s);
                         }
                         Err(e) => {
@@ -146,13 +151,15 @@ fn _main() -> Result<()> {
                         println!("err: {e}");
                     }
                 }
-                Commands::Print => {
+                Commands::Print(
+                    PrintArgs { probabilities }
+                ) => {
                     let Some(season) = season.as_mut() else {
                         _err_no_season();
                         break 'outer;
                     };
 
-                    season.pretty_print(true);
+                    season.pretty_print(! *probabilities);
                 }
                 Commands::Recalculate => {
                     let Some(season) = season.as_mut() else {

@@ -7,11 +7,11 @@ impl<'a> Season<'a> {
     /// Pretty-prints a season.
     pub fn pretty_print(&self, as_counts: bool) -> () {
         let (turn, worlds) = (self.turn, self.worlds.len());
-        let specifier = if worlds == 1 { "world" } else { "worlds" };
+        let specifier = if worlds == 1 { "world" } else { "worlds" }; 
 
         println!(
             "Episode {turn} - {worlds} {specifier} remain\n{}",
-            self.table(as_counts).with(Style::rounded())
+            self.table(as_counts).with(Style::rounded()).with(Alignment::right())
         );
     }
 
