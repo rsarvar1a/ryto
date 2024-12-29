@@ -34,10 +34,10 @@ impl<'a> Season<'a> {
     }
 
     /// Get the worlds that are currently consistent with this season.
-    pub fn worlds(&self) -> Vec<Vec<usize>> {
+    pub fn worlds(&self) -> Vec<Vec<CoupleOutput>> {
         self.worlds
             .iter()
-            .map(|k| self.worldview[*k].clone())
+            .map(|k| self.worldview[*k].clone().into_iter().enumerate().map(|(m, f)| (self.m[m].clone(), self.f[f].clone())).collect())
             .collect()
     }
 }

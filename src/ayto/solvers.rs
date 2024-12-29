@@ -6,12 +6,14 @@ use ndarray::parallel::prelude::IntoParallelRefIterator;
 use crate::prelude::*;
 
 const INDICATIF_TEMPLATE: &'static str =
-    " {wide_bar} | {percent}% ({human_pos}/{human_len}) | {eta} remaining ({per_sec}) ";
+    " {bar:50} | {percent:>3}% ({human_pos}/{human_len}) | {eta_precise} remaining ({per_sec:<}) ";
+
+const RESOLUTION: f32 = 100.0;
 
 impl<'a> Season<'a> {
-    pub fn find_best_ceremony(&self) -> Result<Vec<Vec<CoupleOutput>>> {
+    pub fn find_best_ceremony(&self, naive: bool) -> Result<Vec<Vec<CoupleOutput>>> {
         let best = self
-            .find_best_ceremony_impl()
+            .find_best_ceremony_impl(naive)
             .0
             .into_iter()
             .map(|v| {
@@ -24,7 +26,7 @@ impl<'a> Season<'a> {
         Ok(best)
     }
 
-    fn find_best_ceremony_impl(&self) -> (Vec<Vec<Couple>>, usize) {
+    fn find_best_ceremony_impl(&self, naive: bool) -> (Vec<Vec<Couple>>, usize) {
         if self.worlds.len() == 0 {
             return (vec![], usize::MAX);
         }
@@ -45,21 +47,34 @@ impl<'a> Season<'a> {
     
                     // We should iterate over beam values starting at the number of already-found couples,
                     // because no world left in the worldview couild possibly match on fewer.
-                    let best_possible_worst_case = (self.found..self.n)
-                        .map(|beams| {
-                            let mut season = self.clone();
-                            season
-                                .apply_ceremony_impl(candidate, beams)
-                                .and_then(|season| season.recalculate())
-                                .map(|season| season.find_best_truth_impl(Some(&strip)).1)
-                                .unwrap_or(usize::MAX)
-                        })
-                        .filter(|s| ![0, usize::MAX].contains(s))
-                        .min()
-                        .unwrap_or(usize::MAX);
+                    let score = if naive {
+                        (self.found..=self.n)
+                            .map(|beams| {
+                                let nw = self.num_worlds() as f32;
+                                let mut season = self.clone();
+                                beams as f32 * RESOLUTION * season.apply_ceremony_impl(candidate, beams)
+                                    .and_then(|season| season.recalculate())
+                                    .map(|s| s.find_best_truth_impl(Some(&strip)).1 as f32 / nw)
+                                    .unwrap_or(0.0)
+                            })
+                            .sum::<f32>().round() as usize
+                    } else { 
+                        (self.found..=self.n)
+                            .map(|beams| {
+                                let mut season = self.clone();
+                                season
+                                    .apply_ceremony_impl(candidate, beams)
+                                    .and_then(|season| season.recalculate())
+                                    .map(|season| season.find_best_truth_impl(Some(&strip)).1)
+                                    .unwrap_or(usize::MAX)
+                            })
+                            .filter(|s| ![0, usize::MAX].contains(s))
+                            .min()
+                            .unwrap_or(usize::MAX)
+                    };
     
                     bar.inc(1);
-                    (strip, best_possible_worst_case)
+                    (strip, score)
                 })
                 .collect();
 
@@ -81,32 +96,54 @@ impl<'a> Season<'a> {
     
                     // We should iterate over beam values starting at the number of already-found couples,
                     // because no world left in the worldview couild possibly match on fewer.
-                    let best_possible_worst_case = (self.found..self.n)
-                        .map(|beams| {
-                            let mut season = self.clone();
-                            season
-                                .apply_ceremony_impl(candidate, beams)
-                                .and_then(|season| season.recalculate())
-                                .map(|season| season.find_best_truth_impl(Some(&strip)).1)
-                                .unwrap_or(usize::MAX)
-                        })
-                        .filter(|s| ![0, usize::MAX].contains(s))
-                        .min()
-                        .unwrap_or(usize::MAX);
+                    let score = if naive {
+                        (self.found..=self.n)
+                            .map(|beams| {
+                                let nw = self.num_worlds() as f32;
+                                let mut season = self.clone();
+                                beams as f32 * RESOLUTION * season.apply_ceremony_impl(candidate, beams)
+                                    .and_then(|season| season.recalculate())
+                                    .map(|s| s.num_worlds() as f32 / nw)
+                                    .unwrap_or(0.0)
+                            })
+                            .sum::<f32>().round() as usize
+                    } else { 
+                        (self.found..=self.n)
+                            .map(|beams| {
+                                let mut season = self.clone();
+                                season
+                                    .apply_ceremony_impl(candidate, beams)
+                                    .and_then(|season| season.recalculate())
+                                    .map(|season| season.find_best_truth_impl(Some(&strip)).1)
+                                    .unwrap_or(usize::MAX)
+                            })
+                            .filter(|s| ![0, usize::MAX].contains(s))
+                            .min()
+                            .unwrap_or(usize::MAX)
+                    };
     
-                    (strip, best_possible_worst_case)
+                    (strip, score)
                 })
                 .collect()
         };
 
-        let lowest_worst_case = results
-            .iter()
-            .map(|(_, score)| score)
-            .filter(|score| ![0, usize::MAX].contains(score))
-            .min()
-            .cloned();
+        let best_score = if naive {
+            results
+                .iter()
+                .map(|(_, score)| score)
+                .filter(|score| ![0, usize::MAX].contains(score))
+                .max()
+                .cloned()            
+        } else { 
+            results
+                .iter()
+                .map(|(_, score)| score)
+                .filter(|score| ![0, usize::MAX].contains(score))
+                .min()
+                .cloned()
+        };
 
-        let Some(lowest_score) = lowest_worst_case else {
+        let Some(best_score) = best_score else {
             return (vec![], usize::MAX);
         };
 
@@ -114,7 +151,7 @@ impl<'a> Season<'a> {
             .into_iter()
             .filter(|(_, score)| ![0, usize::MAX].contains(score))
             .filter_map(|(candidate, score)| {
-                if score == lowest_score {
+                if score == best_score {
                     Some(candidate)
                 } else {
                     None
@@ -122,7 +159,7 @@ impl<'a> Season<'a> {
             })
             .collect();
 
-        (best, lowest_score)
+        (best, best_score)
     }
 
     pub fn find_best_truth(

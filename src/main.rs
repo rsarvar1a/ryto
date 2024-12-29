@@ -17,8 +17,10 @@ enum Commands {
     Recalculate,
     ApplyCeremony(ApplyCeremonyArgs),
     ApplyTruthBooth(ApplyTruthBoothArgs),
-    BestCeremony,
+    BestCeremony(BestCeremonyArgs),
     BestTruthBooth(BestTruthBoothArgs),
+    Spread(SpreadArgs),
+    Worlds,
 }
 
 impl std::fmt::Display for Commands {
@@ -30,8 +32,10 @@ impl std::fmt::Display for Commands {
             Commands::Recalculate => "recalculate",
             Commands::ApplyCeremony(_) => "apply-ceremony",
             Commands::ApplyTruthBooth(_) => "apply-truth-booth",
-            Commands::BestCeremony => "best-ceremony",
+            Commands::BestCeremony(_) => "best-ceremony",
             Commands::BestTruthBooth(_) => "best-truth-booth",
+            Commands::Spread(_) => "spread",
+            Commands::Worlds => "worlds",
         };
         write!(f, "{repr}")
     }
@@ -58,6 +62,12 @@ struct ApplyTruthBoothArgs {
     offline: bool,
 }
 
+#[derive(Clone, Debug, Args)] 
+struct BestCeremonyArgs {
+    #[arg(short, long)]
+    naive: bool,
+}
+
 #[derive(Clone, Debug, Args)]
 struct BestTruthBoothArgs {
     #[arg(short, long)]
@@ -74,6 +84,11 @@ struct NewGameArgs {
 struct PrintArgs {
     #[arg(short, long)]
     probabilities: bool,
+}
+
+#[derive(Clone, Debug, Args)]
+struct SpreadArgs {
+    names: Vec<String>,
 }
 
 fn main() -> () {
@@ -192,9 +207,8 @@ fn _main() -> Result<()> {
                             .collect::<Vec<String>>(),
                     );
 
-                    let n = season.size();
-                    if m.len() != n || f.len() != n {
-                        println!("err: wrong number of matches; expected {n}.");
+                    if m.len() != f.len() {
+                        println!("err: expected an even number of names.");
                         break 'outer;
                     }
 
@@ -227,18 +241,27 @@ fn _main() -> Result<()> {
                         println!("err: {e}");
                     }
                 }
-                Commands::BestCeremony => {
+                Commands::BestCeremony(BestCeremonyArgs { naive }) => {
                     let Some(season) = season.as_mut() else {
                         _err_no_season();
                         break 'outer;
                     };
 
-                    let r = season.find_best_ceremony();
+                    let r = season.find_best_ceremony(*naive);
 
                     match r {
                         Ok(candidates) => {
                             if let Some(best_ceremony) = candidates.get(0) {
-                                println!("best: {best_ceremony:?}");
+                                let ceremony_input: Vec<CoupleInput> = best_ceremony.iter().map(|(m, f)| {
+                                    (m.as_str(), f.as_str())
+                                }).collect();
+                                if let Err(e) = season.speculate(ceremony_input.clone(), "best possible ceremony") {
+                                    println!("err: {e}");
+                                }
+                                println!("");
+                                if let Err(e) = season.spread(ceremony_input) {
+                                    println!("err: {e}");
+                                }
                             } else {
                                 println!("There are no worlds; did you enter a contradiction?")
                             }
@@ -265,7 +288,10 @@ fn _main() -> Result<()> {
                     match r {
                         Ok(candidates) => {
                             if let Some((m, f)) = candidates.get(0) {
-                                println!("Best couple: {m} & {f}");
+                                let couple_input = (m.as_str(), f.as_str()); 
+                                if let Err(e) = season.speculate(vec![couple_input], "best possible truth booth") {
+                                    println!("err: {e}");
+                                }
                             } else {
                                 println!("There are no couples; did you enter a contradiction?");
                             }
@@ -273,6 +299,50 @@ fn _main() -> Result<()> {
                         Err(e) => {
                             println!("err: {e}");
                         }
+                    }
+                },
+                Commands::Spread(SpreadArgs { names }) => {
+                    let Some(season) = season.as_mut() else {
+                        _err_no_season();
+                        break 'outer;
+                    };
+
+                    let (m, f) = (
+                        names.iter().step_by(2).cloned().collect::<Vec<String>>(),
+                        names
+                            .iter()
+                            .skip(1)
+                            .step_by(2)
+                            .cloned()
+                            .collect::<Vec<String>>(),
+                    );
+
+                    let n = season.size();
+                    if m.len() != n || f.len() != n {
+                        println!("err: wrong number of matches; expected {n}.");
+                        break 'outer;
+                    }
+
+                    let couples_owned: Vec<CoupleOutput> = m.into_iter().zip(f).collect();
+                    let couples: Vec<CoupleInput> = couples_owned
+                        .iter()
+                        .map(|(m, f)| (m.as_str(), f.as_str()))
+                        .collect();
+
+                    if let Err(e) = season.spread(couples) {
+                        println!("err: {e}");
+                    }
+                },
+                Commands::Worlds => {
+                    let Some(season) = season.as_mut() else {
+                        _err_no_season();
+                        break 'outer;
+                    };
+
+                    let worlds = season.worlds();
+                    println!("worlds:");
+                    for (i, w) in worlds.iter().enumerate() {
+                        println!("{:>3}. {}", i + 1, w.iter().map(|(m, f)| format!("{m} & {f}")).join(", "));
                     }
                 }
             }

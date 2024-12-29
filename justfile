@@ -20,5 +20,5 @@ perf-save:
 report:
     cd perf/ && perf report --no-inline
 
-run: build
+run:
     cargo run --release
